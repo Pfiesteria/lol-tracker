@@ -1,0 +1,92 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+
+export default function HomePage() {
+  const router = useRouter();
+
+  const [gameName, setGameName] = useState("");
+  const [tagLine, setTagLine] = useState("");
+  const [region, setRegion] = useState("na1");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const account = await api.createAccount({ gameName, tagLine, region });
+      router.push(`/dashboard/${account.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-2xl p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">LoL Tracker</h1>
+
+      <form onSubmit={onSubmit} className="space-y-4 rounded-xl border p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="space-y-1">
+            <div className="text-sm font-medium">Game Name</div>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={gameName}
+              onChange={(e) => setGameName(e.target.value)}
+              placeholder="e.g. Faker"
+              required
+            />
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-sm font-medium">Tag Line</div>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={tagLine}
+              onChange={(e) => setTagLine(e.target.value)}
+              placeholder="e.g. NA1"
+              required
+            />
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-sm font-medium">Region</div>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="na1"
+              required
+            />
+          </label>
+        </div>
+
+        {error && (
+          <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+        >
+          {loading ? "Creating..." : "Create Account"}
+        </button>
+      </form>
+
+      <p className="text-sm text-neutral-600">
+        Next step: add a dashboard page that syncs + shows stats/champions.
+      </p>
+    </main>
+  );
+}
