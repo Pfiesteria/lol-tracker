@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, AccountStats, ChampionsResponse } from "@/lib/api";
 
+
+//States for loading, syncing, error, stats, and champion data.
 export default function DashboardClient({ accountId }: { accountId: string }) {
   const [stats, setStats] = useState<AccountStats | null>(null);
   const [champs, setChamps] = useState<ChampionsResponse | null>(null);
@@ -10,10 +12,15 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+
+  /*
+    * Loads both stats and champion data. Used on initial load and after syncing.
+  */
   async function load() {
     setError(null);
     setLoading(true);
 
+    // Load stats and champions together
     try {
       const [s, c] = await Promise.all([
         api.getStats(accountId),
@@ -38,7 +45,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   const rows = useMemo(() => champs?.champions ?? [], [champs]);
 
   async function onSync() {
-    setError(null);
+    setError(null);  
     setSyncing(true);
 
     try {
@@ -51,6 +58,10 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
     }
   }
 
+
+  /*
+    * Renders  dashboard UI, showing loading state, errors, stats, and champion data.
+  */
   return (
     <main className="mx-auto max-w-3xl p-6 space-y-6">
       <div className="flex items-center justify-between gap-3">

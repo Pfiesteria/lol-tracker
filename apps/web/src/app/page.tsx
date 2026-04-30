@@ -36,12 +36,12 @@ export default function HomePage() {
       <form onSubmit={onSubmit} className="space-y-4 rounded-xl border p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="space-y-1">
-            <div className="text-sm font-medium">Game Name</div>
+            <div className="text-sm font-medium">Summoner ID</div>
             <input
               className="w-full rounded-md border px-3 py-2"
               value={gameName}
               onChange={(e) => setGameName(e.target.value)}
-              placeholder="e.g. Faker"
+              placeholder="e.g. Pfiesteria"
               required
             />
           </label>
