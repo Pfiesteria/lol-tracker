@@ -1,0 +1,168 @@
+import { Body, Controller, Post, Get } from '@nestjs/common';
+import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateAccountDto } from './dto/create-account.dto';
+import { RiotService } from '../riot/riot.service';
+import { Param } from '@nestjs/common';
+import { MatchSyncService } from '../match-sync/match-sync.service';
+//import { error } from 'console';
+
+@ApiTags('accounts')
+@Controller('accounts')
+export class AccountsController {
+  constructor(
+    private readonly riot: RiotService,
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly matchSync: MatchSyncService,
+  ) {}
+
+  //Creates dto object
+  @Post()
+  @ApiBody({ type: CreateAccountDto })
+  async createAccount(@Body() body: CreateAccountDto) {
+    const apiKey = this.config.get<string>('RIOT_API_KEY');
+
+    //Checks if key is right
+    if (!apiKey) {
+      return {
+        error: 'RIOT_API_KEY is not set in apps/api/api/.env',
+      };
+    }
+
+    //Calls riot api to get account info
+    const account = await this.riot.getAccountByRiotId(
+      body.gameName,
+      body.tagLine,
+      body.region,
+      apiKey,
+    );
+
+    //then saves it to the database. If the account already exists, it updates the existing record.
+    const saved = await this.prisma.riotAccount.upsert({
+      where: { puuid: account.puuid },
+      create: {
+        puuid: account.puuid,
+        gameName: account.gameName,
+        tagLine: account.tagLine,
+        region: body.region,
+      },
+      update: {
+        gameName: account.gameName,
+        tagLine: account.tagLine,
+        region: body.region,
+      },
+    });
+
+    return saved;
+  }
+
+  //Syncs 5 most recent matches for the account with the given id.
+  @Post(':id/sync')
+  async syncAccount(@Param('id') id: string) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+    });
+
+    if (!account) {
+      return { error: 'Account not found' };
+    }
+
+    return this.matchSync.syncRecentMatches(account.puuid, 5);
+  }
+
+  //Gets overall stats for the account with the given id.
+  @Get(':id/stats')
+  async getStats(@Param('id') id: string) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    const rows = await this.prisma.matchParticipant.findMany({
+      where: { riotAccId: id },
+      //Prisma query to get stats we want
+      select: { win: true, kills: true, deaths: true, assists: true },
+    });
+
+    const totalGames = rows.length;
+    //filter rows to get wins
+    const wins = rows.filter((r) => r.win).length;
+    const losses = totalGames - wins;
+
+    const kills = rows.reduce((sum, r) => sum + r.kills, 0);
+    const deaths = rows.reduce((sum, r) => sum + r.deaths, 0);
+    const assists = rows.reduce((sum, r) => sum + r.assists, 0);
+
+    const avgKills = totalGames ? kills / totalGames : 0;
+    const avgDeaths = totalGames ? deaths / totalGames : 0;
+    const avgAssists = totalGames ? assists / totalGames : 0;
+
+    const winRate = totalGames ? wins / totalGames : 0;
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+
+    //returns all the formatted stats
+    return {
+      accountId: id,
+      totalGames,
+      wins,
+      losses,
+      winRatePercent: totalGames ? round(winRate * 100) : 0,
+      averages: {
+        kills: round(avgKills),
+        deaths: round(avgDeaths),
+        assists: round(avgAssists),
+        kda: round(
+          avgDeaths === 0
+            ? avgKills + avgAssists
+            : (avgKills + avgAssists) / avgDeaths,
+        ),
+      },
+    };
+  }
+
+  //Gets champion stats for the account with the given id.
+  @Get(':id/champions')
+  async getChampionStats(@Param('id') id: string) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    const rows = await this.prisma.matchParticipant.findMany({
+      where: { riotAccId: id },
+      select: { championId: true, win: true },
+    });
+
+    const byChamp = new Map<number, { games: number; wins: number }>();
+
+    for (const r of rows) {
+      const cur = byChamp.get(r.championId) ?? { games: 0, wins: 0 };
+      cur.games += 1;
+      if (r.win) cur.wins += 1;
+      byChamp.set(r.championId, cur);
+    }
+    const results = Array.from(byChamp.entries())
+      .map(([championId, v]) => ({
+        championId,
+        games: v.games,
+        wins: v.wins,
+        losses: v.games - v.wins,
+        winRatePercent: v.games
+          ? Math.round((v.wins / v.games) * 10000) / 100
+          : 0,
+      }))
+      .sort((a, b) => b.games - a.games);
+
+    return {
+      accountId: id,
+      champions: results,
+    };
+  }
+}
