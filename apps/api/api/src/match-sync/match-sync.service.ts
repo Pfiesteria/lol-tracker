@@ -16,8 +16,8 @@ export class MatchSyncService {
     private readonly prisma: PrismaService,
   ) {}
 
-  //Gets match data for the account with the given id and saves the match stats to the database currently fetches most recent 5
-  async syncRecentMatches(puuid: string, count = 5) {
+  //Gets match data for the account with the given id and saves the match stats to the database currently fetches most recent 10
+  async syncRecentMatches(puuid: string, count = 10) {
     const apiKey = this.config.get<string>('RIOT_API_KEY');
     const routing =
       this.config.get<string>('RIOT_REGION_ROUTING') ?? 'americas';

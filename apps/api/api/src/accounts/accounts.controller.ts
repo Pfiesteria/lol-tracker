@@ -55,10 +55,13 @@ export class AccountsController {
       },
     });
 
+    // Load the most recent matches as soon as an account is looked up.
+    await this.matchSync.syncRecentMatches(saved.puuid, 10);
+
     return saved;
   }
 
-  //Syncs 5 most recent matches for the account with the given id.
+  //Syncs 10 most recent matches for the account with the given id.
   @Post(':id/sync')
   async syncAccount(@Param('id') id: string) {
     const account = await this.prisma.riotAccount.findUnique({
@@ -69,7 +72,7 @@ export class AccountsController {
       return { error: 'Account not found' };
     }
 
-    return this.matchSync.syncRecentMatches(account.puuid, 5);
+    return this.matchSync.syncRecentMatches(account.puuid, 10);
   }
 
   //Gets overall stats for the account with the given id.
@@ -163,6 +166,63 @@ export class AccountsController {
     return {
       accountId: id,
       champions: results,
+    };
+  }
+
+  //Gets recent individual matches for the account with the given id.
+  @Get(':id/matches')
+  async getRecentMatches(@Param('id') id: string) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    const rows = await this.prisma.matchParticipant.findMany({
+      where: { riotAccId: id },
+      select: {
+        matchId: true,
+        championId: true,
+        win: true,
+        kills: true,
+        deaths: true,
+        assists: true,
+        lane: true,
+        role: true,
+        match: {
+          select: {
+            queueId: true,
+            gameStartAt: true,
+            durationSec: true,
+            patch: true,
+          },
+        },
+      },
+      orderBy: {
+        match: {
+          gameStartAt: 'desc',
+        },
+      },
+      take: 10,
+    });
+
+    return {
+      accountId: id,
+      matches: rows.map((r) => ({
+        matchId: r.matchId,
+        championId: r.championId,
+        win: r.win,
+        kills: r.kills,
+        deaths: r.deaths,
+        assists: r.assists,
+        lane: r.lane,
+        role: r.role,
+        queueId: r.match.queueId,
+        gameStartAt: r.match.gameStartAt?.toISOString() ?? null,
+        durationSec: r.match.durationSec,
+        patch: r.match.patch,
+      })),
     };
   }
 }

@@ -9,7 +9,7 @@ export default function HomePage() {
 
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine] = useState("");
-  const [region, setRegion] = useState("na1");
+  const [region, setRegion] = useState("americas");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto max-w-2xl p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">LoL Tracker</h1>
+      <h1 className="text-2xl font-semibold text-center">LoL Tracker</h1>
 
       <form onSubmit={onSubmit} className="space-y-4 rounded-xl border p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -59,13 +59,17 @@ export default function HomePage() {
 
           <label className="space-y-1">
             <div className="text-sm font-medium">Region</div>
-            <input
-              className="w-full rounded-md border px-3 py-2"
+            <select
+              className="w-full rounded-md border bg-black px-3 py-2 text-white"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-              placeholder="na1"
               required
-            />
+            >
+              <option value="americas">americas</option>
+              <option value="europe">europe</option>
+              <option value="asia">asia</option>
+              <option value="sea">sea</option>
+            </select>
           </label>
         </div>
 

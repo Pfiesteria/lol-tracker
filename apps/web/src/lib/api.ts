@@ -41,6 +41,26 @@ export type ChampionsResponse = {
   champions: ChampionAgg[];
 };
 
+export type MatchSummary = {
+  matchId: string;
+  championId: number;
+  win: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  lane: string | null;
+  role: string | null;
+  queueId: number | null;
+  gameStartAt: string | null;
+  durationSec: number | null;
+  patch: string | null;
+};
+
+export type MatchesResponse = {
+  accountId: string;
+  matches: MatchSummary[];
+};
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -78,5 +98,9 @@ export const api = {
 
   getChampions(accountId: string) {
     return apiFetch<ChampionsResponse>(`/accounts/${accountId}/champions`);
+  },
+
+  getMatches(accountId: string) {
+    return apiFetch<MatchesResponse>(`/accounts/${accountId}/matches`);
   },
 };
