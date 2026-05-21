@@ -10,6 +10,13 @@ import {
 } from "@/lib/api";
 import { getChampionNameMap } from "@/lib/champions";
 
+// Helper to get champion icon URL from Data Dragon CDN
+const DATA_DRAGON_VERSION = "14.10.1";
+function getChampionIconUrl(championName?: string) {
+  if (!championName) return undefined;
+ 
+  return `https://ddragon.leagueoflegends.com/cdn/${DATA_DRAGON_VERSION}/img/champion/${championName.replace(/\s|'/g, "")}.png`;
+}
 
 //States for loading, syncing, error, stats, and champion data.
 export default function DashboardClient({ accountId }: { accountId: string }) {
@@ -217,20 +224,39 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                         </div>
                       </div>
 
-                      <div className="md:col-span-5">
-                        <div className="text-sm font-semibold">
-                          {championNames.get(m.championId) ??
-                            `Champion ${m.championId}`}
+
+                      <div className="md:col-span-5 flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            //Creates the player cards with champ name and icons
+                            const champName = championNames.get(m.championId);
+                            const iconUrl = getChampionIconUrl(champName);
+                            return iconUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={iconUrl}
+                                alt={champName ?? `Champion ${m.championId}`}
+                                width={40}
+                                height={40}
+                                style={{ borderRadius: 4, background: '#eee' }}
+                              />
+                            ) : null;
+                          })()}
+                          <span className="text-lg font-semibold">
+                            {championNames.get(m.championId) ?? `Champion ${m.championId}`}
+                          </span>
                         </div>
-                        <div className="text-xl font-bold tracking-tight">
-                          {m.kills} / {m.deaths} / {m.assists}
-                        </div>
-                        <div
-                          className={`text-sm ${
-                            m.win ? "text-blue-800" : "text-red-800"
-                          }`}
-                        >
-                          {computeKdaRatio(m.kills, m.deaths, m.assists)} KDA
+                        <div className="ml-4">
+                          <div className="text-xl font-bold tracking-tight">
+                            {m.kills} / {m.deaths} / {m.assists}
+                          </div>
+                          <div
+                            className={`text-sm ${
+                              m.win ? "text-blue-800" : "text-red-800"
+                            }`}
+                          >
+                            {computeKdaRatio(m.kills, m.deaths, m.assists)} KDA
+                          </div>
                         </div>
                       </div>
 
