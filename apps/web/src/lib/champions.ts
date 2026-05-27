@@ -6,13 +6,22 @@ type DDragonChampionRecord = {
   name: string;
 };
 
+export type ChampionMetadata = {
+  id: string;
+  name: string;
+};
+
 type DDragonChampionsResponse = {
   data: Record<string, DDragonChampionRecord>;
 };
 
-let championNameMapPromise: Promise<Map<number, string>> | null = null;
+let championMetadataMapPromise: Promise<Map<number, ChampionMetadata>> | null =
+  null;
 
-async function fetchChampionNameMap(): Promise<Map<number, string>> {
+//Gets more metadata about champions to map the champion ID to the correct names
+async function fetchChampionMetadataMap(): Promise<
+  Map<number, ChampionMetadata>
+> {
   const versionsRes = await fetch(
     "https://ddragon.leagueoflegends.com/api/versions.json",
   );
@@ -37,22 +46,27 @@ async function fetchChampionNameMap(): Promise<Map<number, string>> {
   }
 
   const payload = (await champsRes.json()) as DDragonChampionsResponse;
-  const map = new Map<number, string>();
+  const map = new Map<number, ChampionMetadata>();
 
   for (const champ of Object.values(payload.data)) {
-    const id = Number(champ.key);
-    if (!Number.isNaN(id)) {
-      map.set(id, champ.name);
+    const numericId = Number(champ.key);
+    if (!Number.isNaN(numericId)) {
+      map.set(numericId, {
+        id: champ.id,
+        name: champ.name,
+      });
     }
   }
 
   return map;
 }
 
-export async function getChampionNameMap(): Promise<Map<number, string>> {
-  if (!championNameMapPromise) {
-    championNameMapPromise = fetchChampionNameMap();
+export async function getChampionMetadataMap(): Promise<
+  Map<number, ChampionMetadata>
+> {
+  if (!championMetadataMapPromise) {
+    championMetadataMapPromise = fetchChampionMetadataMap();
   }
 
-  return championNameMapPromise;
+  return championMetadataMapPromise;
 }

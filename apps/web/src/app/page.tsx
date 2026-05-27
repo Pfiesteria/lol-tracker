@@ -84,7 +84,7 @@ export default function HomePage() {
           disabled={loading}
           className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
         >
-          {loading ? "Creating..." : "Create Account"}
+          {loading ? "Searching..." : "Search Account"}
         </button>
       </form>
 

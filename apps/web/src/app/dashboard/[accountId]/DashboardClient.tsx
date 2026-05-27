@@ -8,14 +8,16 @@ import {
   ChampionsResponse,
   MatchesResponse,
 } from "@/lib/api";
-import { getChampionNameMap } from "@/lib/champions";
+import { ChampionMetadata, getChampionMetadataMap } from "@/lib/champions";
 
 // Helper to get champion icon URL from Data Dragon CDN
 const DATA_DRAGON_VERSION = "14.10.1";
-function getChampionIconUrl(championName?: string) {
-  if (!championName) return undefined;
+const RECENT_MATCHES_LIMIT = 10;
+
+function getChampionIconUrl(championSlug?: string) {
+  if (!championSlug) return undefined;
  
-  return `https://ddragon.leagueoflegends.com/cdn/${DATA_DRAGON_VERSION}/img/champion/${championName.replace(/\s|'/g, "")}.png`;
+  return `https://ddragon.leagueoflegends.com/cdn/${DATA_DRAGON_VERSION}/img/champion/${championSlug}.png`;
 }
 
 //States for loading, syncing, error, stats, and champion data.
@@ -23,7 +25,9 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   const [stats, setStats] = useState<AccountStats | null>(null);
   const [champs, setChamps] = useState<ChampionsResponse | null>(null);
   const [matches, setMatches] = useState<MatchesResponse | null>(null);
-  const [championNames, setChampionNames] = useState<Map<number, string>>(
+  const [championMetadata, setChampionMetadata] = useState<
+    Map<number, ChampionMetadata>
+  >(
     new Map(),
   );
   const [loading, setLoading] = useState(true);
@@ -66,10 +70,10 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   useEffect(() => {
     let mounted = true;
 
-    void getChampionNameMap()
+    void getChampionMetadataMap()
       .then((map) => {
         if (mounted) {
-          setChampionNames(map);
+          setChampionMetadata(map);
         }
       })
       .catch(() => {
@@ -82,7 +86,18 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   }, []);
 
   const championRows = useMemo(() => champs?.champions ?? [], [champs]);
-  const matchRows = useMemo(() => matches?.matches ?? [], [matches]);
+  //Logic to get the 10 most recent matches sorted by date
+  const matchRows = useMemo(() => {
+    const rows = [...(matches?.matches ?? [])];
+
+    rows.sort((a, b) => {
+      const aTime = a.gameStartAt ? new Date(a.gameStartAt).getTime() : 0;
+      const bTime = b.gameStartAt ? new Date(b.gameStartAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    return rows.slice(0, RECENT_MATCHES_LIMIT);
+  }, [matches]);
 
   async function onSync() {
     setError(null);  
@@ -113,7 +128,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
           <button
             onClick={onSync}
             disabled={syncing}
-            className="rounded-md border px-4 py-2 disabled:opacity-50"
+            className="rounded-md border px-4 py-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
             {syncing ? "Syncing..." : "Sync Recent Matches"}
           </button>
@@ -151,7 +166,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                     {championRows.map((r) => (
                       <tr key={r.championId} className="border-b last:border-b-0">
                         <td className="py-2 pr-3">
-                          {championNames.get(r.championId) ??
+                          {championMetadata.get(r.championId)?.name ??
                             `Champion ${r.championId}`}
                         </td>
                         <td className="py-2 pr-3">{r.games}</td>
@@ -179,7 +194,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium">Recent Matches</h2>
                 <div className="text-xs text-neutral-600">
-                  Last {stats.totalGames} tracked games
+                  Showing {Math.min(matchRows.length, RECENT_MATCHES_LIMIT)} most recent
                 </div>
               </div>
 
@@ -229,13 +244,13 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                         <div className="flex items-center gap-2">
                           {(() => {
                             //Creates the player cards with champ name and icons
-                            const champName = championNames.get(m.championId);
-                            const iconUrl = getChampionIconUrl(champName);
+                            const champ = championMetadata.get(m.championId);
+                            const iconUrl = getChampionIconUrl(champ?.id);
                             return iconUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={iconUrl}
-                                alt={champName ?? `Champion ${m.championId}`}
+                                alt={champ?.name ?? `Champion ${m.championId}`}
                                 width={40}
                                 height={40}
                                 style={{ borderRadius: 4, background: '#eee' }}
@@ -243,7 +258,8 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                             ) : null;
                           })()}
                           <span className="text-lg font-semibold">
-                            {championNames.get(m.championId) ?? `Champion ${m.championId}`}
+                            {championMetadata.get(m.championId)?.name ??
+                              `Champion ${m.championId}`}
                           </span>
                         </div>
                         <div className="ml-4">
@@ -315,6 +331,8 @@ function formatDuration(durationSec: number | null): string {
 
 function formatQueueName(queueId: number | null): string {
   switch (queueId) {
+    case 1750:
+      return "Arena";
     case 420:
       return "Ranked Solo/Duo";
     case 440:
