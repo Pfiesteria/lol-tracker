@@ -86,6 +86,10 @@ export const api = {
     });
   },
 
+  getAccount(accountId: string) {
+    return apiFetch<RiotAccount>(`/accounts/${accountId}`);
+  },
+
   syncAccount(accountId: string) {
     return apiFetch(`/accounts/${accountId}/sync`, {
       method: "POST",

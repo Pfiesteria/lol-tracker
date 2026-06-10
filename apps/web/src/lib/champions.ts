@@ -9,6 +9,7 @@ type DDragonChampionRecord = {
 export type ChampionMetadata = {
   id: string;
   name: string;
+  iconUrl: string;
 };
 
 type DDragonChampionsResponse = {
@@ -54,6 +55,7 @@ async function fetchChampionMetadataMap(): Promise<
       map.set(numericId, {
         id: champ.id,
         name: champ.name,
+        iconUrl: `https://ddragon.leagueoflegends.com/cdn/${latest}/img/champion/${champ.id}.png`,
       });
     }
   }

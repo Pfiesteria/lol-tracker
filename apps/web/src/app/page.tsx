@@ -30,10 +30,12 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-6 space-y-6">
-      <h1 className="text-2xl font-semibold text-center">LoL Tracker</h1>
+    <main className="relative mx-auto flex min-h-screen w-full max-w-2xl items-center justify-center p-6">
+      <h1 className="absolute top-6 left-1/2 w-full -translate-x-1/2 text-center text-5xl font-semibold">
+        League of Legends Tracker
+      </h1>
 
-      <form onSubmit={onSubmit} className="space-y-4 rounded-xl border p-4">
+      <form onSubmit={onSubmit} className="w-full space-y-4 rounded-xl border p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="space-y-1">
             <div className="text-sm font-medium">Summoner ID</div>
@@ -82,15 +84,11 @@ export default function HomePage() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+          className="rounded-md bg-blue-500 px-4 py-2 text-white disabled:opacity-50"
         >
           {loading ? "Searching..." : "Search Account"}
         </button>
       </form>
-
-      <p className="text-sm text-neutral-600">
-        Next step: add a dashboard page that syncs + shows stats/champions.
-      </p>
     </main>
   );
 }

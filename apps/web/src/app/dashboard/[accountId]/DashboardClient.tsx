@@ -4,24 +4,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   api,
+  RiotAccount,
   AccountStats,
   ChampionsResponse,
   MatchesResponse,
 } from "@/lib/api";
 import { ChampionMetadata, getChampionMetadataMap } from "@/lib/champions";
-
-// Helper to get champion icon URL from Data Dragon CDN
-const DATA_DRAGON_VERSION = "14.10.1";
 const RECENT_MATCHES_LIMIT = 10;
-
-function getChampionIconUrl(championSlug?: string) {
-  if (!championSlug) return undefined;
- 
-  return `https://ddragon.leagueoflegends.com/cdn/${DATA_DRAGON_VERSION}/img/champion/${championSlug}.png`;
-}
 
 //States for loading, syncing, error, stats, and champion data.
 export default function DashboardClient({ accountId }: { accountId: string }) {
+  const [account, setAccount] = useState<RiotAccount | null>(null);
   const [stats, setStats] = useState<AccountStats | null>(null);
   const [champs, setChamps] = useState<ChampionsResponse | null>(null);
   const [matches, setMatches] = useState<MatchesResponse | null>(null);
@@ -44,16 +37,19 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
 
     // Load stats and champions together
     try {
-      const [s, c, m] = await Promise.all([
+      const [a, s, c, m] = await Promise.all([
+        api.getAccount(accountId),
         api.getStats(accountId),
         api.getChampions(accountId),
         api.getMatches(accountId),
       ]);
+      setAccount(a);
       setStats(s);
       setChamps(c);
       setMatches(m);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
+      setAccount(null);
       setStats(null);
       setChamps(null);
       setMatches(null);
@@ -112,6 +108,10 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
       setSyncing(false);
     }
   }
+  //Gets current account name
+  const dashboardTitle = account?.gameName
+    ? `${toPossessive(account.gameName)} stats`
+    : "Current User ID's stats";
 
 
   /*
@@ -120,15 +120,15 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <h1 className="text-2xl font-semibold">{dashboardTitle}</h1>
         <div className="flex items-center gap-2">
-          <Link href="/" className="rounded-md border px-4 py-2 text-sm">
+          <Link href="/" className="rounded-md bg-blue-500 border px-4 py-2 text-sm">
             Return to Home
           </Link>
           <button
             onClick={onSync}
             disabled={syncing}
-            className="rounded-md border px-4 py-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-blue-500 border px-4 py-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
             {syncing ? "Syncing..." : "Sync Recent Matches"}
           </button>
@@ -245,7 +245,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                           {(() => {
                             //Creates the player cards with champ name and icons
                             const champ = championMetadata.get(m.championId);
-                            const iconUrl = getChampionIconUrl(champ?.id);
+                            const iconUrl = champ?.iconUrl;
                             return iconUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -310,6 +310,13 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
       )}
     </main>
   );
+}
+
+function toPossessive(name: string): string {
+  if (!name) return "User's";
+
+  const endsWithS = /s$/i.test(name);
+  return endsWithS ? `${name}'` : `${name}'s`;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

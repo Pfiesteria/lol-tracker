@@ -75,6 +75,27 @@ export class AccountsController {
     return this.matchSync.syncRecentMatches(account.puuid, 10);
   }
 
+  //Gets account profile for the account with the given id.
+  @Get(':id')
+  async getAccount(@Param('id') id: string) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        puuid: true,
+        gameName: true,
+        tagLine: true,
+        region: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    return account;
+  }
+
   //Gets overall stats for the account with the given id.
   @Get(':id/stats')
   async getStats(@Param('id') id: string) {
