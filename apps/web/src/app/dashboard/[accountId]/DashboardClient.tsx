@@ -25,6 +25,8 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   );
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
 
@@ -41,12 +43,14 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
         api.getAccount(accountId),
         api.getStats(accountId),
         api.getChampions(accountId),
-        api.getMatches(accountId),
+        api.getMatches(accountId, RECENT_MATCHES_LIMIT, 0),
       ]);
       setAccount(a);
       setStats(s);
       setChamps(c);
       setMatches(m);
+      // A full first page suggests Riot likely has older matches to load.
+      setHasMore(m.matches.length >= RECENT_MATCHES_LIMIT);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       setAccount(null);
@@ -82,7 +86,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   }, []);
 
   const championRows = useMemo(() => champs?.champions ?? [], [champs]);
-  //Logic to get the 10 most recent matches sorted by date
+  //All loaded matches sorted by most recent date
   const matchRows = useMemo(() => {
     const rows = [...(matches?.matches ?? [])];
 
@@ -92,8 +96,38 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
       return bTime - aTime;
     });
 
-    return rows.slice(0, RECENT_MATCHES_LIMIT);
+    return rows;
   }, [matches]);
+
+  //Pulls the next 10 games from Riot, persists them, and appends to the list.
+  async function onLoadMore() {
+    if (!matches) return;
+    setError(null);
+    setLoadingMore(true);
+
+    try {
+      const next = await api.loadMoreMatches(
+        accountId,
+        RECENT_MATCHES_LIMIT,
+        matches.matches.length,
+      );
+
+      // Append only matches we don't already have (guards against overlap).
+      const existingIds = new Set(matches.matches.map((m) => m.matchId));
+      const fresh = next.matches.filter((m) => !existingIds.has(m.matchId));
+
+      setMatches({
+        ...matches,
+        total: matches.total + fresh.length,
+        matches: [...matches.matches, ...fresh],
+      });
+      setHasMore(next.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function onSync() {
     setError(null);  
@@ -194,7 +228,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium">Recent Matches</h2>
                 <div className="text-xs text-neutral-600">
-                  Showing {Math.min(matchRows.length, RECENT_MATCHES_LIMIT)} most recent
+                  Showing {matchRows.length} {matchRows.length === 1 ? "match" : "matches"}
                 </div>
               </div>
 
@@ -304,6 +338,18 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                   </div>
                 )}
               </div>
+
+              {hasMore && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={onLoadMore}
+                    disabled={loadingMore}
+                    className="rounded-md bg-blue-500 border px-4 py-2 text-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loadingMore ? "Loading..." : "Load more"}
+                  </button>
+                </div>
+              )}
             </section>
           </div>
         </>

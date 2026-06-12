@@ -58,7 +58,14 @@ export type MatchSummary = {
 
 export type MatchesResponse = {
   accountId: string;
+  total: number;
   matches: MatchSummary[];
+};
+
+export type LoadMoreResponse = {
+  accountId: string;
+  matches: MatchSummary[];
+  hasMore: boolean;
 };
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -104,7 +111,25 @@ export const api = {
     return apiFetch<ChampionsResponse>(`/accounts/${accountId}/champions`);
   },
 
-  getMatches(accountId: string) {
-    return apiFetch<MatchesResponse>(`/accounts/${accountId}/matches`);
+  getMatches(accountId: string, limit = 10, offset = 0) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return apiFetch<MatchesResponse>(
+      `/accounts/${accountId}/matches?${params.toString()}`,
+    );
+  },
+
+  // Pulls the next page of matches from Riot, persists them, and returns them.
+  loadMoreMatches(accountId: string, limit = 10, offset = 0) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return apiFetch<LoadMoreResponse>(
+      `/accounts/${accountId}/matches/load-more?${params.toString()}`,
+      { method: "POST" },
+    );
   },
 };

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get } from '@nestjs/common';
+import { Body, Controller, Post, Get, Query } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -190,16 +190,8 @@ export class AccountsController {
     };
   }
 
-  //Gets recent individual matches for the account with the given id.
-  @Get(':id/matches')
-  async getRecentMatches(@Param('id') id: string) {
-    const account = await this.prisma.riotAccount.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!account) return { error: 'Account not found' };
-
+  //Reads a page of an account's matches from the database, newest first.
+  private async readMatchesPage(id: string, take: number, skip: number) {
     const rows = await this.prisma.matchParticipant.findMany({
       where: { riotAccId: id },
       select: {
@@ -225,25 +217,86 @@ export class AccountsController {
           gameStartAt: 'desc',
         },
       },
-      take: 10,
+      take,
+      skip,
     });
+
+    return rows.map((r) => ({
+      matchId: r.matchId,
+      championId: r.championId,
+      win: r.win,
+      kills: r.kills,
+      deaths: r.deaths,
+      assists: r.assists,
+      lane: r.lane,
+      role: r.role,
+      queueId: r.match.queueId,
+      gameStartAt: r.match.gameStartAt?.toISOString() ?? null,
+      durationSec: r.match.durationSec,
+      patch: r.match.patch,
+    }));
+  }
+
+  //Gets recent individual matches for the account with the given id.
+  @Get(':id/matches')
+  async getRecentMatches(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    // Clamp pagination params to safe ranges.
+    const take = Math.min(Math.max(Number(limit) || 10, 1), 50);
+    const skip = Math.max(Number(offset) || 0, 0);
+
+    const [total, matches] = await Promise.all([
+      this.prisma.matchParticipant.count({ where: { riotAccId: id } }),
+      this.readMatchesPage(id, take, skip),
+    ]);
+
+    return { accountId: id, total, matches };
+  }
+
+  //Pulls the next page of matches from Riot, persists them, and returns them.
+  //`offset` is how many of the player's matches the client already has.
+  @Post(':id/matches/load-more')
+  async loadMoreMatches(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: { id: true, puuid: true },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    const take = Math.min(Math.max(Number(limit) || 10, 1), 50);
+    const skip = Math.max(Number(offset) || 0, 0);
+
+    // Fetch the next slice of the player's history from Riot and persist it.
+    const sync = await this.matchSync.syncRecentMatches(
+      account.puuid,
+      take,
+      skip,
+    );
+
+    if ('error' in sync) return sync;
+
+    const matches = await this.readMatchesPage(id, take, skip);
 
     return {
       accountId: id,
-      matches: rows.map((r) => ({
-        matchId: r.matchId,
-        championId: r.championId,
-        win: r.win,
-        kills: r.kills,
-        deaths: r.deaths,
-        assists: r.assists,
-        lane: r.lane,
-        role: r.role,
-        queueId: r.match.queueId,
-        gameStartAt: r.match.gameStartAt?.toISOString() ?? null,
-        durationSec: r.match.durationSec,
-        patch: r.match.patch,
-      })),
+      matches,
+      // A full page back from Riot means there is likely more history to load.
+      hasMore: sync.matchCountFetched === take,
     };
   }
 }
