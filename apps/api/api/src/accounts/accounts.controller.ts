@@ -263,6 +263,57 @@ export class AccountsController {
     return { accountId: id, total, matches };
   }
 
+  //Gets detailed per-game stats for the tracked player in a single match.
+  //Reads from the stored raw Riot response.
+  @Get(':id/matches/:matchId/details')
+  async getMatchDetails(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+  ) {
+    const account = await this.prisma.riotAccount.findUnique({
+      where: { id },
+      select: { puuid: true },
+    });
+
+    if (!account) return { error: 'Account not found' };
+
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: { raw: true },
+    });
+
+    if (!match || !match.raw) return { error: 'Match details not available' };
+
+    // The full Riot match response is stored in `raw`; access it untyped.
+    const raw = match.raw as {
+      info?: { participants?: Array<Record<string, unknown>> };
+    };
+    const participants = raw.info?.participants ?? [];
+    const p = participants.find((x) => x.puuid === account.puuid);
+
+    if (!p) return { error: 'Player not found in match' };
+
+    const num = (v: unknown) => Number(v ?? 0);
+
+    return {
+      matchId,
+      champLevel: num(p.champLevel),
+      cs: num(p.totalMinionsKilled) + num(p.neutralMinionsKilled),
+      goldEarned: num(p.goldEarned),
+      damageDealtToChampions: num(p.totalDamageDealtToChampions),
+      damageTaken: num(p.totalDamageTaken),
+      items: [
+        num(p.item0),
+        num(p.item1),
+        num(p.item2),
+        num(p.item3),
+        num(p.item4),
+        num(p.item5),
+        num(p.item6),
+      ],
+    };
+  }
+
   //Pulls the next page of matches from Riot, persists them, and returns them.
   //`offset` is how many of the player's matches the client already has.
   @Post(':id/matches/load-more')

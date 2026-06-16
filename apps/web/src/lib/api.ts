@@ -68,6 +68,16 @@ export type LoadMoreResponse = {
   hasMore: boolean;
 };
 
+export type MatchDetails = {
+  matchId: string;
+  champLevel: number;
+  cs: number;
+  goldEarned: number;
+  damageDealtToChampions: number;
+  damageTaken: number;
+  items: number[];
+};
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -118,6 +128,13 @@ export const api = {
     });
     return apiFetch<MatchesResponse>(
       `/accounts/${accountId}/matches?${params.toString()}`,
+    );
+  },
+
+  // Detailed per-game stats for the tracked player in a single match.
+  getMatchDetails(accountId: string, matchId: string) {
+    return apiFetch<MatchDetails>(
+      `/accounts/${accountId}/matches/${matchId}/details`,
     );
   },
 

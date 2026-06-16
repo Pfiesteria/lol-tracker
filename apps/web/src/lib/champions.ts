@@ -72,3 +72,36 @@ export async function getChampionMetadataMap(): Promise<
 
   return championMetadataMapPromise;
 }
+
+let latestVersionPromise: Promise<string> | null = null;
+
+//Memoized fetch of the latest DataDragon version, used to build item icon URLs.
+export async function getLatestDDragonVersion(): Promise<string> {
+  if (!latestVersionPromise) {
+    latestVersionPromise = (async () => {
+      const versionsRes = await fetch(
+        "https://ddragon.leagueoflegends.com/api/versions.json",
+      );
+
+      if (!versionsRes.ok) {
+        throw new Error("Failed to fetch DataDragon versions");
+      }
+
+      const versions = (await versionsRes.json()) as DDragonVersionsResponse;
+      const latest = versions[0];
+
+      if (!latest) {
+        throw new Error("No DataDragon versions available");
+      }
+
+      return latest;
+    })();
+  }
+
+  return latestVersionPromise;
+}
+
+//Builds the DataDragon icon URL for a given item id (0 means an empty slot).
+export function getItemIconUrl(version: string, itemId: number): string {
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${itemId}.png`;
+}

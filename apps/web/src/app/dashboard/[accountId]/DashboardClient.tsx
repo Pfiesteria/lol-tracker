@@ -8,8 +8,14 @@ import {
   AccountStats,
   ChampionsResponse,
   MatchesResponse,
+  MatchDetails,
 } from "@/lib/api";
-import { ChampionMetadata, getChampionMetadataMap } from "@/lib/champions";
+import {
+  ChampionMetadata,
+  getChampionMetadataMap,
+  getLatestDDragonVersion,
+  getItemIconUrl,
+} from "@/lib/champions";
 const RECENT_MATCHES_LIMIT = 10;
 
 //States for loading, syncing, error, stats, and champion data.
@@ -28,6 +34,17 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Per-match expandable detail state.
+  const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
+  const [matchDetails, setMatchDetails] = useState<Map<string, MatchDetails>>(
+    new Map(),
+  );
+  const [detailsLoading, setDetailsLoading] = useState<Set<string>>(new Set());
+  const [detailsError, setDetailsError] = useState<Map<string, string>>(
+    new Map(),
+  );
+  const [ddragonVersion, setDdragonVersion] = useState<string | null>(null);
 
 
   /*
@@ -84,6 +101,60 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void getLatestDDragonVersion()
+      .then((version) => {
+        if (mounted) setDdragonVersion(version);
+      })
+      .catch(() => {
+        // Item icons simply won't render if the version fetch fails.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Toggles a match card open/closed, lazily fetching its details on first open.
+  async function onToggleMatch(matchId: string) {
+    if (expandedMatchId === matchId) {
+      setExpandedMatchId(null);
+      return;
+    }
+
+    setExpandedMatchId(matchId);
+
+    // Already cached or in flight — nothing more to do.
+    if (matchDetails.has(matchId) || detailsLoading.has(matchId)) return;
+
+    setDetailsLoading((prev) => new Set(prev).add(matchId));
+    setDetailsError((prev) => {
+      const next = new Map(prev);
+      next.delete(matchId);
+      return next;
+    });
+
+    try {
+      const details = await api.getMatchDetails(accountId, matchId);
+      setMatchDetails((prev) => new Map(prev).set(matchId, details));
+    } catch (err) {
+      setDetailsError((prev) =>
+        new Map(prev).set(
+          matchId,
+          err instanceof Error ? err.message : "Failed to load details",
+        ),
+      );
+    } finally {
+      setDetailsLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(matchId);
+        return next;
+      });
+    }
+  }
 
   const championRows = useMemo(() => champs?.champions ?? [], [champs]);
   //All loaded matches sorted by most recent date
@@ -252,7 +323,19 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                         : "border-red-300 bg-red-100 text-red-950"
                     }`}
                   >
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-center">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedMatchId === m.matchId}
+                      onClick={() => void onToggleMatch(m.matchId)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void onToggleMatch(m.matchId);
+                        }
+                      }}
+                      className="grid cursor-pointer grid-cols-1 gap-3 md:grid-cols-12 md:items-center"
+                    >
                       <div className="md:col-span-3">
                         <div
                           className={`text-xs ${
@@ -310,25 +393,46 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                         </div>
                       </div>
 
-                      <div className="md:col-span-4 md:text-right">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            m.win
-                              ? "bg-blue-600 text-white"
-                              : "bg-red-600 text-white"
-                          }`}
-                        >
-                          {m.win ? "Victory" : "Defeat"}
-                        </span>
-                        <div
-                          className={`mt-2 text-xs ${
-                            m.win ? "text-blue-700" : "text-red-700"
-                          }`}
-                        >
-                          {m.patch ? `Patch ${m.patch}` : "Patch Unknown"}
+                      <div className="md:col-span-4 flex items-center justify-between gap-2 md:flex-col md:items-end md:justify-center">
+                        <div className="md:text-right">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                              m.win
+                                ? "bg-blue-600 text-white"
+                                : "bg-red-600 text-white"
+                            }`}
+                          >
+                            {m.win ? "Victory" : "Defeat"}
+                          </span>
+                          <div
+                            className={`mt-2 text-xs ${
+                              m.win ? "text-blue-700" : "text-red-700"
+                            }`}
+                          >
+                            {m.patch ? `Patch ${m.patch}` : "Patch Unknown"}
+                          </div>
                         </div>
+                        <span
+                          aria-hidden
+                          className={`select-none text-lg leading-none transition-transform ${
+                            expandedMatchId === m.matchId ? "rotate-180" : ""
+                          } ${m.win ? "text-blue-700" : "text-red-700"}`}
+                        >
+                          ▾
+                        </span>
                       </div>
                     </div>
+
+                    {expandedMatchId === m.matchId && (
+                      <MatchDetailsPanel
+                        win={m.win}
+                        durationSec={m.durationSec}
+                        details={matchDetails.get(m.matchId) ?? null}
+                        loading={detailsLoading.has(m.matchId)}
+                        error={detailsError.get(m.matchId) ?? null}
+                        ddragonVersion={ddragonVersion}
+                      />
+                    )}
                   </div>
                 ))}
 
@@ -370,6 +474,90 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border p-3">
       <div className="text-xs text-neutral-600">{label}</div>
       <div className="mt-1 text-base font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function formatNumber(n: number): string {
+  return n.toLocaleString();
+}
+
+//Expanded per-game stats for the tracked player: level, CS, gold, damage, items.
+function MatchDetailsPanel({
+  win,
+  durationSec,
+  details,
+  loading,
+  error,
+  ddragonVersion,
+}: {
+  win: boolean;
+  durationSec: number | null;
+  details: MatchDetails | null;
+  loading: boolean;
+  error: string | null;
+  ddragonVersion: string | null;
+}) {
+  const borderColor = win ? "border-blue-300" : "border-red-300";
+
+  if (loading) {
+    return (
+      <div className={`mt-3 border-t ${borderColor} pt-3 text-sm`}>Loading…</div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`mt-3 border-t ${borderColor} pt-3 text-sm`}>{error}</div>
+    );
+  }
+
+  if (!details) return null;
+
+  const csPerMin =
+    typeof durationSec === "number" && durationSec > 0
+      ? (details.cs / (durationSec / 60)).toFixed(1)
+      : null;
+
+  return (
+    <div className={`mt-3 space-y-3 border-t ${borderColor} pt-3`}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <Stat label="Level" value={`${details.champLevel}`} />
+        <Stat
+          label="CS"
+          value={csPerMin ? `${details.cs} (${csPerMin}/min)` : `${details.cs}`}
+        />
+        <Stat label="Gold" value={formatNumber(details.goldEarned)} />
+        <Stat
+          label="Damage to Champs"
+          value={formatNumber(details.damageDealtToChampions)}
+        />
+        <Stat label="Damage Taken" value={formatNumber(details.damageTaken)} />
+      </div>
+
+      <div>
+        <div className="mb-1 text-xs text-neutral-600">Items</div>
+        <div className="flex flex-wrap gap-1">
+          {details.items.map((itemId, i) =>
+            itemId > 0 && ddragonVersion ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={getItemIconUrl(ddragonVersion, itemId)}
+                alt={`Item ${itemId}`}
+                width={32}
+                height={32}
+                style={{ borderRadius: 4, background: "#eee" }}
+              />
+            ) : (
+              <div
+                key={i}
+                className="h-8 w-8 rounded border border-neutral-300 bg-neutral-200/40"
+              />
+            ),
+          )}
+        </div>
+      </div>
     </div>
   );
 }
