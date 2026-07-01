@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
@@ -35,21 +35,53 @@ export type RiotMatchV5 = {
   };
 };
 
-// Helper to map platform routing values to regional routing for match v5 endpoints
-function platformToRegionalRouting(platform: string): string {
-  const p = platform.toLowerCase();
+// Regional routing values used by account-v1 and match-v5 endpoints.
+// This is what an account's `region` is validated against (see CreateAccountDto).
+export const REGIONAL_ROUTES = ['americas', 'europe', 'asia', 'sea'] as const;
 
-  if (['na1', 'br1', 'la1', 'la2', 'oc1'].includes(p)) return 'americas';
-  if (['euw1', 'eun1', 'tr1', 'ru'].includes(p)) return 'europe';
-  if (['kr', 'jp1'].includes(p)) return 'asia';
-  if (['ph2', 'sg2', 'th2', 'tw2', 'vn2'].includes(p)) return 'sea';
-
-  return 'americas';
+// Normalizes a caller-supplied region to a valid regional routing value.
+function toRegionalRouting(region: string): string {
+  const r = region.toLowerCase();
+  return (REGIONAL_ROUTES as readonly string[]).includes(r) ? r : 'americas';
 }
 
 @Injectable()
 export class RiotService {
+  private readonly logger = new Logger(RiotService.name);
+
   constructor(private readonly http: HttpService) {}
+
+  // Maps an Axios failure from the Riot API to a meaningful HttpException.
+  // Handles auth (403) and rate-limit (429) explicitly; everything else is a 502.
+  private toRiotHttpException(err: unknown, fallbackMessage: string): never {
+    const error = err as AxiosError;
+    const status = error.response?.status;
+
+    if (status === 403) {
+      throw new HttpException(
+        'Invalid or expired Riot API key',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    if (status === 429) {
+      const header = error.response?.headers?.['retry-after'] as
+        | string
+        | number
+        | undefined;
+      const retryAfter = header != null ? String(header) : undefined;
+      this.logger.warn(
+        `Riot API rate limit hit (retry-after=${retryAfter ?? 'n/a'})`,
+      );
+      throw new HttpException(
+        `Riot API rate limit exceeded${retryAfter ? `, retry after ${retryAfter}s` : ''}`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.logger.warn(`${fallbackMessage} (status=${status ?? 'unknown'})`);
+    throw new HttpException(fallbackMessage, HttpStatus.BAD_GATEWAY);
+  }
 
   async getAccountByRiotId(
     gameName: string,
@@ -60,7 +92,7 @@ export class RiotService {
     const safeGameName = gameName.trim();
     const safeTagLine = tagLine.trim().toLowerCase();
 
-    const regionalRouting = platformToRegionalRouting(region);
+    const regionalRouting = toRegionalRouting(region);
 
     const url = `https://${regionalRouting}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
       safeGameName,
@@ -75,24 +107,11 @@ export class RiotService {
 
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
-      const status = error.response?.status;
-
+      const status = (err as AxiosError).response?.status;
       if (status === 404) {
         throw new HttpException('Riot account not found', HttpStatus.NOT_FOUND);
       }
-
-      if (status === 403) {
-        throw new HttpException(
-          'Invalid or expired Riot API key',
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-      throw new HttpException(
-        'Failed to fetch Riot account',
-        HttpStatus.BAD_GATEWAY,
-      );
+      this.toRiotHttpException(err, 'Failed to fetch Riot account');
     }
   }
 
@@ -118,20 +137,7 @@ export class RiotService {
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
-      const status = error.response?.status;
-
-      if (status === 403) {
-        throw new HttpException(
-          'Invalid or expired Riot API key',
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-      throw new HttpException(
-        'Failed to fetch match IDs',
-        HttpStatus.BAD_GATEWAY,
-      );
+      this.toRiotHttpException(err, 'Failed to fetch match IDs');
     }
   }
 
@@ -152,20 +158,7 @@ export class RiotService {
       );
       return response.data;
     } catch (err) {
-      const error = err as AxiosError;
-      const status = error.response?.status;
-
-      if (status === 403) {
-        throw new HttpException(
-          'Invalid or expired Riot API key',
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-      throw new HttpException(
-        'Failed to fetch match details',
-        HttpStatus.BAD_GATEWAY,
-      );
+      this.toRiotHttpException(err, 'Failed to fetch match details');
     }
   }
 }

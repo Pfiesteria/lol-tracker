@@ -1,2 +1,7 @@
 node_modules
 .claude
+
+# Environment files
+.env
+.env.*
+!.env.example

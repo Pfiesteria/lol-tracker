@@ -1,6 +1,7 @@
-const{PrismaClient} =  require('@prisma/client');
+const { PrismaClient, MatchIngestStatus } = require('@prisma/client');
 
 module.exports = {
-    PrismaClient, 
+  PrismaClient,
+  MatchIngestStatus,
 };
 

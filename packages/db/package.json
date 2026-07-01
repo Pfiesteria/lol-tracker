@@ -2,11 +2,15 @@
   "name": "@repo/db",
   "private": true,
   "version": "1.0.0",
-  "description": "",
+  "description": "Shared Prisma client and schema for the LoL Tracker monorepo",
   "main": "index.js",
-  "types": "index.ts",
+  "types": "index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "studio": "prisma studio",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

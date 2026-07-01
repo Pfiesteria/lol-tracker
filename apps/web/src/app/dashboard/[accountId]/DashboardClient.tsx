@@ -93,8 +93,9 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
           setChampionMetadata(map);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         // Keep fallback to champion IDs when name mapping fetch fails.
+        console.warn("Failed to load champion metadata from DataDragon:", err);
       });
 
     return () => {
@@ -109,8 +110,9 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
       .then((version) => {
         if (mounted) setDdragonVersion(version);
       })
-      .catch(() => {
+      .catch((err) => {
         // Item icons simply won't render if the version fetch fails.
+        console.warn("Failed to load DataDragon version:", err);
       });
 
     return () => {
@@ -299,7 +301,8 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium">Recent Matches</h2>
                 <div className="text-xs text-neutral-600">
-                  Showing {matchRows.length} {matchRows.length === 1 ? "match" : "matches"}
+                  Showing {matchRows.length} of {matches?.total ?? matchRows.length}{" "}
+                  {(matches?.total ?? matchRows.length) === 1 ? "match" : "matches"}
                 </div>
               </div>
 
@@ -323,18 +326,11 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                         : "border-red-300 bg-red-100 text-red-950"
                     }`}
                   >
-                    <div
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
                       aria-expanded={expandedMatchId === m.matchId}
                       onClick={() => void onToggleMatch(m.matchId)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          void onToggleMatch(m.matchId);
-                        }
-                      }}
-                      className="grid cursor-pointer grid-cols-1 gap-3 md:grid-cols-12 md:items-center"
+                      className="grid w-full cursor-pointer grid-cols-1 gap-3 text-left md:grid-cols-12 md:items-center"
                     >
                       <div className="md:col-span-3">
                         <div
@@ -421,7 +417,7 @@ export default function DashboardClient({ accountId }: { accountId: string }) {
                           ▾
                         </span>
                       </div>
-                    </div>
+                    </button>
 
                     {expandedMatchId === m.matchId && (
                       <MatchDetailsPanel
@@ -542,7 +538,7 @@ function MatchDetailsPanel({
             itemId > 0 && ddragonVersion ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                key={i}
+                key={`slot-${i}-item-${itemId}`}
                 src={getItemIconUrl(ddragonVersion, itemId)}
                 alt={`Item ${itemId}`}
                 width={32}
@@ -551,7 +547,7 @@ function MatchDetailsPanel({
               />
             ) : (
               <div
-                key={i}
+                key={`slot-${i}-empty`}
                 className="h-8 w-8 rounded border border-neutral-300 bg-neutral-200/40"
               />
             ),

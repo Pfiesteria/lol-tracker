@@ -68,6 +68,15 @@ export type LoadMoreResponse = {
   hasMore: boolean;
 };
 
+export type SyncResult = {
+  puuid: string;
+  matchCountFetched: number;
+  createdMatches: number;
+  updatedMatches: number;
+  failedMatches: number;
+  participantsProcessed: number;
+};
+
 export type MatchDetails = {
   matchId: string;
   champLevel: number;
@@ -79,6 +88,7 @@ export type MatchDetails = {
 };
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // The `/api` prefix is rewritten to the backend by Next.js (see next.config.ts).
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: {
@@ -108,7 +118,7 @@ export const api = {
   },
 
   syncAccount(accountId: string) {
-    return apiFetch(`/accounts/${accountId}/sync`, {
+    return apiFetch<SyncResult>(`/accounts/${accountId}/sync`, {
       method: "POST",
     });
   },

@@ -1,16 +1,26 @@
-import { Body, Controller, Post, Get, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Get,
+  Query,
+  Param,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { RiotService } from '../riot/riot.service';
-import { Param } from '@nestjs/common';
 import { MatchSyncService } from '../match-sync/match-sync.service';
-//import { error } from 'console';
 
 @ApiTags('accounts')
 @Controller('accounts')
 export class AccountsController {
+  private readonly logger = new Logger(AccountsController.name);
+
   constructor(
     private readonly riot: RiotService,
     private readonly config: ConfigService,
@@ -18,20 +28,21 @@ export class AccountsController {
     private readonly matchSync: MatchSyncService,
   ) {}
 
-  //Creates dto object
+  private requireApiKey(): string {
+    const apiKey = this.config.get<string>('RIOT_API_KEY');
+    if (!apiKey) {
+      // Don't leak configuration details to clients; log server-side instead.
+      this.logger.error('RIOT_API_KEY is not configured');
+      throw new InternalServerErrorException('Server configuration error');
+    }
+    return apiKey;
+  }
+
   @Post()
   @ApiBody({ type: CreateAccountDto })
   async createAccount(@Body() body: CreateAccountDto) {
-    const apiKey = this.config.get<string>('RIOT_API_KEY');
+    const apiKey = this.requireApiKey();
 
-    //Checks if key is right
-    if (!apiKey) {
-      return {
-        error: 'RIOT_API_KEY is not set in apps/api/api/.env',
-      };
-    }
-
-    //Calls riot api to get account info
     const account = await this.riot.getAccountByRiotId(
       body.gameName,
       body.tagLine,
@@ -39,7 +50,7 @@ export class AccountsController {
       apiKey,
     );
 
-    //then saves it to the database. If the account already exists, it updates the existing record.
+    // Persist the account, updating the existing record if it already exists.
     const saved = await this.prisma.riotAccount.upsert({
       where: { puuid: account.puuid },
       create: {
@@ -61,21 +72,17 @@ export class AccountsController {
     return saved;
   }
 
-  //Syncs 10 most recent matches for the account with the given id.
   @Post(':id/sync')
   async syncAccount(@Param('id') id: string) {
     const account = await this.prisma.riotAccount.findUnique({
       where: { id },
     });
 
-    if (!account) {
-      return { error: 'Account not found' };
-    }
+    if (!account) throw new NotFoundException('Account not found');
 
     return this.matchSync.syncRecentMatches(account.puuid, 10);
   }
 
-  //Gets account profile for the account with the given id.
   @Get(':id')
   async getAccount(@Param('id') id: string) {
     const account = await this.prisma.riotAccount.findUnique({
@@ -91,12 +98,11 @@ export class AccountsController {
       },
     });
 
-    if (!account) return { error: 'Account not found' };
+    if (!account) throw new NotFoundException('Account not found');
 
     return account;
   }
 
-  //Gets overall stats for the account with the given id.
   @Get(':id/stats')
   async getStats(@Param('id') id: string) {
     const account = await this.prisma.riotAccount.findUnique({
@@ -104,16 +110,14 @@ export class AccountsController {
       select: { id: true },
     });
 
-    if (!account) return { error: 'Account not found' };
+    if (!account) throw new NotFoundException('Account not found');
 
     const rows = await this.prisma.matchParticipant.findMany({
       where: { riotAccId: id },
-      //Prisma query to get stats we want
       select: { win: true, kills: true, deaths: true, assists: true },
     });
 
     const totalGames = rows.length;
-    //filter rows to get wins
     const wins = rows.filter((r) => r.win).length;
     const losses = totalGames - wins;
 
@@ -129,7 +133,6 @@ export class AccountsController {
 
     const round = (n: number) => Math.round(n * 100) / 100;
 
-    //returns all the formatted stats
     return {
       accountId: id,
       totalGames,
@@ -149,7 +152,6 @@ export class AccountsController {
     };
   }
 
-  //Gets champion stats for the account with the given id.
   @Get(':id/champions')
   async getChampionStats(@Param('id') id: string) {
     const account = await this.prisma.riotAccount.findUnique({
@@ -157,7 +159,7 @@ export class AccountsController {
       select: { id: true },
     });
 
-    if (!account) return { error: 'Account not found' };
+    if (!account) throw new NotFoundException('Account not found');
 
     const rows = await this.prisma.matchParticipant.findMany({
       where: { riotAccId: id },
@@ -190,7 +192,7 @@ export class AccountsController {
     };
   }
 
-  //Reads a page of an account's matches from the database, newest first.
+  // Reads a page of an account's matches from the database, newest first.
   private async readMatchesPage(id: string, take: number, skip: number) {
     const rows = await this.prisma.matchParticipant.findMany({
       where: { riotAccId: id },
@@ -237,7 +239,6 @@ export class AccountsController {
     }));
   }
 
-  //Gets recent individual matches for the account with the given id.
   @Get(':id/matches')
   async getRecentMatches(
     @Param('id') id: string,
@@ -249,7 +250,7 @@ export class AccountsController {
       select: { id: true },
     });
 
-    if (!account) return { error: 'Account not found' };
+    if (!account) throw new NotFoundException('Account not found');
 
     // Clamp pagination params to safe ranges.
     const take = Math.min(Math.max(Number(limit) || 10, 1), 50);
@@ -263,8 +264,8 @@ export class AccountsController {
     return { accountId: id, total, matches };
   }
 
-  //Gets detailed per-game stats for the tracked player in a single match.
-  //Reads from the stored raw Riot response.
+  // Gets detailed per-game stats for the tracked player in a single match,
+  // read from the stored raw Riot response.
   @Get(':id/matches/:matchId/details')
   async getMatchDetails(
     @Param('id') id: string,
@@ -275,23 +276,24 @@ export class AccountsController {
       select: { puuid: true },
     });
 
-    if (!account) return { error: 'Account not found' };
+    if (!account) throw new NotFoundException('Account not found');
 
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
       select: { raw: true },
     });
 
-    if (!match || !match.raw) return { error: 'Match details not available' };
+    if (!match || !match.raw) {
+      throw new NotFoundException('Match details not available');
+    }
 
-    // The full Riot match response is stored in `raw`; access it untyped.
     const raw = match.raw as {
       info?: { participants?: Array<Record<string, unknown>> };
     };
     const participants = raw.info?.participants ?? [];
     const p = participants.find((x) => x.puuid === account.puuid);
 
-    if (!p) return { error: 'Player not found in match' };
+    if (!p) throw new NotFoundException('Player not found in match');
 
     const num = (v: unknown) => Number(v ?? 0);
 
@@ -314,8 +316,8 @@ export class AccountsController {
     };
   }
 
-  //Pulls the next page of matches from Riot, persists them, and returns them.
-  //`offset` is how many of the player's matches the client already has.
+  // Pulls the next page of matches from Riot, persists them, and returns them.
+  // `offset` is how many of the player's matches the client already has.
   @Post(':id/matches/load-more')
   async loadMoreMatches(
     @Param('id') id: string,
@@ -327,7 +329,7 @@ export class AccountsController {
       select: { id: true, puuid: true },
     });
 
-    if (!account) return { error: 'Account not found' };
+    if (!account) throw new NotFoundException('Account not found');
 
     const take = Math.min(Math.max(Number(limit) || 10, 1), 50);
     const skip = Math.max(Number(offset) || 0, 0);
@@ -338,8 +340,6 @@ export class AccountsController {
       take,
       skip,
     );
-
-    if ('error' in sync) return sync;
 
     const matches = await this.readMatchesPage(id, take, skip);
 

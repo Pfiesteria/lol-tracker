@@ -62,7 +62,7 @@ export default function HomePage() {
           <label className="space-y-1">
             <div className="text-sm font-medium">Region</div>
             <select
-              className="w-full rounded-md border bg-black px-3 py-2 text-white"
+              className="w-full rounded-md border bg-background px-3 py-2 text-foreground"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
               required

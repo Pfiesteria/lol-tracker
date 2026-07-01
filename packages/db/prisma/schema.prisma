@@ -32,7 +32,8 @@ model Match {
   ingestedAt  DateTime?
   lastError   String?
 
-  // Make these optional so we can insert rows before ingesting full details
+  // Optional so a row can be inserted before full details are ingested.
+  // `status` gates reads: only INGESTED matches are guaranteed to have these set.
   queueId     Int?
   gameStartAt DateTime?
   durationSec Int?
@@ -61,13 +62,13 @@ model MatchParticipant {
   lane       String?
   role       String?
 
-  match      Match       @relation(fields: [matchId], references: [id])
-  riotAcc    RiotAccount @relation(fields: [riotAccId], references: [id])
+  match      Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  riotAcc    RiotAccount @relation(fields: [riotAccId], references: [id], onDelete: Cascade)
 
+  // The unique composite already indexes (matchId) and (matchId, riotAccId),
+  // so no separate indexes are needed for those. riotAccId drives all per-account
+  // read queries; (matchId, championId) supports champion lookups within a match.
   @@unique([matchId, riotAccId])
   @@index([riotAccId])
-  @@index([matchId])
-  @@index([matchId, riotAccId])
-  @@index([matchId, riotAccId, win])
   @@index([matchId, championId])
 }

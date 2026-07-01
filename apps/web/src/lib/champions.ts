@@ -1,3 +1,6 @@
+// Riot's DataDragon CDN. Centralized so a future host/path change is one edit.
+const DDRAGON_BASE = "https://ddragon.leagueoflegends.com";
+
 type DDragonVersionsResponse = string[];
 
 type DDragonChampionRecord = {
@@ -23,9 +26,7 @@ let championMetadataMapPromise: Promise<Map<number, ChampionMetadata>> | null =
 async function fetchChampionMetadataMap(): Promise<
   Map<number, ChampionMetadata>
 > {
-  const versionsRes = await fetch(
-    "https://ddragon.leagueoflegends.com/api/versions.json",
-  );
+  const versionsRes = await fetch(`${DDRAGON_BASE}/api/versions.json`);
 
   if (!versionsRes.ok) {
     throw new Error("Failed to fetch champion versions");
@@ -39,7 +40,7 @@ async function fetchChampionMetadataMap(): Promise<
   }
 
   const champsRes = await fetch(
-    `https://ddragon.leagueoflegends.com/cdn/${latest}/data/en_US/champion.json`,
+    `${DDRAGON_BASE}/cdn/${latest}/data/en_US/champion.json`,
   );
 
   if (!champsRes.ok) {
@@ -55,7 +56,7 @@ async function fetchChampionMetadataMap(): Promise<
       map.set(numericId, {
         id: champ.id,
         name: champ.name,
-        iconUrl: `https://ddragon.leagueoflegends.com/cdn/${latest}/img/champion/${champ.id}.png`,
+        iconUrl: `${DDRAGON_BASE}/cdn/${latest}/img/champion/${champ.id}.png`,
       });
     }
   }
@@ -79,9 +80,7 @@ let latestVersionPromise: Promise<string> | null = null;
 export async function getLatestDDragonVersion(): Promise<string> {
   if (!latestVersionPromise) {
     latestVersionPromise = (async () => {
-      const versionsRes = await fetch(
-        "https://ddragon.leagueoflegends.com/api/versions.json",
-      );
+      const versionsRes = await fetch(`${DDRAGON_BASE}/api/versions.json`);
 
       if (!versionsRes.ok) {
         throw new Error("Failed to fetch DataDragon versions");
@@ -103,5 +102,5 @@ export async function getLatestDDragonVersion(): Promise<string> {
 
 //Builds the DataDragon icon URL for a given item id (0 means an empty slot).
 export function getItemIconUrl(version: string, itemId: number): string {
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${itemId}.png`;
+  return `${DDRAGON_BASE}/cdn/${version}/img/item/${itemId}.png`;
 }

@@ -1,13 +1,17 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from "next";
+
+// Backend API base URL; overridable per environment (staging/prod).
+const API_URL = process.env.API_URL ?? "http://localhost:3001";
+
+const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:3001/:path*",
+        destination: `${API_URL}/:path*`,
       },
     ];
   },
 };
 
-module.exports = nextConfig; 
+export default nextConfig;
